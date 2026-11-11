@@ -1,0 +1,6 @@
+# Rotina mensal — roda nesta ordem
+01 Cria base
+02 Aplica desconto
+03 Acrescenta avulsos
+04 Remove pequenos
+05 Resultado final

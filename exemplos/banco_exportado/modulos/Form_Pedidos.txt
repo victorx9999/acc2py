@@ -1,0 +1,17 @@
+Version =20
+Begin Form
+    Caption ="Pedidos"
+End
+CodeBehindForm
+Attribute VB_GlobalNameSpace = False
+Option Compare Database
+Option Explicit
+
+Private Sub cmdFiltrar_Click()
+    If IsNull(Me!txtCliente) Then
+        MsgBox "Informe o cliente", vbExclamation
+        Exit Sub
+    End If
+    Me.lblTotal.Caption = "Total: " & Format(Nz(DSum("Valor", "Pedidos", "ClienteID=" & Me!txtCliente), 0), "Currency")
+    txtStatus = "Filtrado"
+End Sub

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "acc2py"
+version = "0.1.0"
+description = "Transpilador de consultas SQL e módulos VBA do Microsoft Access para Python/pandas"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pandas>=2.0", "numpy"]
+
+[project.optional-dependencies]
+windows = ["pywin32"]          # backend 'com' (lê direto do Access instalado)
+multiplataforma = ["access-parser"]  # backend 'parser' (Linux/macOS)
+excel = ["openpyxl"]           # DoCmd.TransferSpreadsheet
+dev = ["pytest"]
+
+[project.scripts]
+acc2py = "acc2py.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["acc2py*"]

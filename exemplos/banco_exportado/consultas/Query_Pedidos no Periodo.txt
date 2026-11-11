@@ -1,0 +1,4 @@
+dbMemo "SQL" ="PARAMETERS [Data inicial] DateTime, [Data final] DateTime;\015\012SELECT Pedidos.PedidoID, Pedidos.Data, Format([Data],\"mmmm/yyyy\") AS Mes\015\012FROM Pedidos\015\012WHERE Pedidos.Data Between [Data inicial] And [Data final];\015\012"
+dbMemo "Connect" =""
+Begin
+End
