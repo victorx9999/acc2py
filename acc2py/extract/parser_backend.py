@@ -370,6 +370,17 @@ class ParserExtractor:
                                  "no Windows ou exporte os módulos (.bas/.cls) para uma pasta.")
         return out
 
+    def linked_tables(self) -> dict[str, str]:
+        out = {}
+        for r in self._rows("MSysObjects"):
+            if r.get("Type") in (4, 6) and not str(r.get("Name", "")).startswith("MSys"):
+                out[r["Name"]] = f"{r.get('Connect') or ''} {r.get('Database') or ''} | {r.get('ForeignName') or ''}".strip()
+        return out
+
+    def columns(self, name: str) -> dict[str, str]:
+        from ..runtime.inputs import schema_from_frame
+        return schema_from_frame(self.read_table(name))
+
     def autonumber_columns(self) -> dict[str, str]:
         return {}
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import json
 import fnmatch
 import os
 import re
@@ -26,6 +27,7 @@ class Result:
     modules: dict = field(default_factory=dict)      # nome -> (arquivo, status)
     added_deps: list = field(default_factory=list)
     sequence: list = field(default_factory=list)
+    inputs: dict = field(default_factory=dict)
     diags: Diagnostics = field(default_factory=Diagnostics)
 
 
@@ -63,7 +65,9 @@ def transpile_database(source: str, out_dir: str, *, queries: Optional[list[str]
                        modules: Optional[list[str]] = None, no_vba: bool = False,
                        backend: str = "auto", export_data: bool = False, locale: str = "pt-BR",
                        include_hidden: bool = False, package: Optional[str] = None,
-                       sequence: Optional[list[str]] = None) -> Result:
+                       sequence: Optional[list[str]] = None,
+                       input_modes: Optional[dict] = None, all_monthly: bool = False,
+                       vendor: bool = True) -> Result:
     src_path = Path(source)
     pkg_name = package or py_identifier(src_path.stem if src_path.suffix else src_path.name) or "banco"
     pkg_dir = Path(out_dir) / pkg_name
@@ -93,6 +97,7 @@ def transpile_database(source: str, out_dir: str, *, queries: Optional[list[str]
         compiled: dict[str, str] = {}
         func_names: dict[str, str] = {}
         used_udfs: set[str] = set()
+        table_deps: dict[str, set] = {}
         query_lower = {q.lower(): q for q in all_queries}
         pending = list(selected)
         seen = set()
@@ -119,6 +124,7 @@ def transpile_database(source: str, out_dir: str, *, queries: Optional[list[str]
                 compiled[name] = _stub_query(name, sql, fn, e)
                 res.queries[name] = (fn, "erro")
                 continue
+            table_deps[name] = {d for d in comp.deps if d.lower() not in query_lower}
             for d in comp.deps:
                 if d.lower() in query_lower and d.lower() not in seen:
                     dep = query_lower[d.lower()]
@@ -209,16 +215,59 @@ def transpile_database(source: str, out_dir: str, *, queries: Optional[list[str]
             autonumber = ex.autonumber_columns()
         except Exception:  # noqa: BLE001
             pass
-        data_dir = None
-        if export_data:
-            data_dir = pkg_dir / "dados"
-            data_dir.mkdir()
-            for t in table_names:
+        # ------------------------------------------------ tabelas de entrada
+        created_all = {t.lower() for t in (_make_table_target(all_queries[q]) for q in compiled) if t}
+        real_tables = {t.lower(): t for t in table_names}
+        try:
+            linked = {k.lower(): v for k, v in ex.linked_tables().items()}
+        except Exception:  # noqa: BLE001
+            linked = {}
+        modes = {k.lower(): v for k, v in (input_modes or {}).items()}
+        entradas: dict[str, dict] = {}
+        for qname in compiled:
+            for d in sorted(table_deps.get(qname, ())):
+                key = d.lower()
+                if key in created_all or any(e.lower() == key for e in entradas):
+                    continue
+                if real_tables and key not in real_tables:
+                    continue
+                tname = real_tables.get(key, d)
+                default = "mensal" if (all_monthly or key in linked) else "fixa"
+                entradas[tname] = {"modo": modes.get(key, default), "vinculada": linked.get(key, ""),
+                                   "colunas": {}, "usada_por": []}
                 try:
-                    df = ex.read_table(t)
-                    _save_table(df, data_dir, t)
+                    entradas[tname]["colunas"] = ex.columns(tname)
                 except Exception as e:  # noqa: BLE001
-                    diags.warn(f"tabela {t}", f"não exportada: {e}")
+                    diags.warn(f"tabela {tname}", f"colunas/tipos não lidos (a conferência dos arquivos "
+                                                  f"de entrada fica limitada): {e}")
+        for qname in compiled:
+            for d in table_deps.get(qname, ()):
+                for t in entradas:
+                    if t.lower() == d.lower() and qname not in entradas[t]["usada_por"]:
+                        entradas[t]["usada_por"].append(qname)
+        res.inputs = entradas
+        _write(pkg_dir / "entradas.json", json.dumps(entradas, ensure_ascii=False, indent=2))
+        data_dir = pkg_dir / "dados"
+        data_dir.mkdir()
+        to_export = list(table_names) if export_data else list(entradas)
+        for t in to_export:
+            try:
+                df = ex.read_table(t)
+                _save_table(df, data_dir, t)
+                if t in entradas and not entradas[t]["colunas"]:
+                    from .runtime.inputs import schema_from_frame
+                    entradas[t]["colunas"] = schema_from_frame(df)
+            except Exception as e:  # noqa: BLE001
+                lvl = diags.error if entradas.get(t, {}).get("modo") == "fixa" else diags.warn
+                lvl(f"tabela {t}", f"cópia não exportada para dados/: {e}")
+        _write(pkg_dir / "entradas.json", json.dumps(entradas, ensure_ascii=False, indent=2))
+        if vendor:
+            _vendor_runtime(pkg_dir)
+        _write(pkg_dir / ".gitignore", "# dados do banco e resultados não vão para o controle de versão\n"
+                                       "dados/\nentradas/\nsaidas/\nexecucao.json\n__pycache__/\n")
+        _write(pkg_dir / "__main__.py", _main_file(pkg_name))
+        _write(Path(out_dir) / f"Abrir tela - {pkg_name}.bat",
+               f'@echo off\r\ncd /d "%~dp0"\r\npython -m {pkg_name}\r\nif errorlevel 1 pause\r\n')
         _write(pkg_dir / "__init__.py", _init_file(pkg_name, source, generated, public_funcs,
                                                    autonumber, locale, export_data))
         _write(Path(out_dir) / f"exemplo_{pkg_name}.py", _example_file(pkg_name, compiled, all_queries))
@@ -325,28 +374,57 @@ def _consultas_file(compiled, func_names, all_queries, source, kinds, requested,
     return "\n".join(lines) + "\n"
 
 
+def _vendor_runtime(pkg_dir: Path):
+    """Copia o acc2py para dentro do pacote: ele roda só com Python + pandas."""
+    src = Path(__file__).resolve().parent
+    dst = pkg_dir / "_vendor" / "acc2py"
+    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+
+
+def _main_file(pkg) -> str:
+    return f'''"""python -m {pkg}  → abre a tela de execução no navegador."""
+import sys
+
+from . import pacote
+
+if __name__ == "__main__":
+    from acc2py.tela import servir
+    sys.exit(servir(pacote=pacote()))
+'''
+
+
 def _init_file(pkg, source, generated, public_funcs, autonumber, locale, has_data) -> str:
     mod_imports = ""
     if generated:
         names = ", ".join(sorted(py_name(n) for n in generated))
-        mod_imports = f"from .modulos import {names}  # noqa: F401\n"
+        mod_imports = f"from .modulos import {names}  # noqa: F401,E402\n"
     funcs = "".join(f"    {k!r}: {v},\n" for k, v in sorted(public_funcs.items()))
     return f'''"""Pacote gerado por acc2py a partir de {Path(source).name} em {datetime.now():%d/%m/%Y %H:%M}.
 
-Uso:
-    from {pkg} import abrir
-    db = abrir()                      # carrega as tabelas
-    df = db.run("Nome da consulta", {{"Parâmetro": valor}})
+Roda SEM Microsoft Access: as tabelas de entrada vêm de arquivos Excel/CSV/TXT.
+
+    python -m {pkg}                               # abre a tela (escolher arquivos e executar)
+
+    from {pkg} import executar, definir_entrada
+    definir_entrada("Movimento", "C:/dados/movimento_jan.xlsx")
+    etapas, arquivo = executar({{"Data inicial": "01/01/2026"}})
 """
-from pathlib import Path
+import sys as _sys
+from pathlib import Path as _Path
 
-from acc2py.runtime import Database, vbafuncs
-from acc2py.runtime import vba as vb
+# usa a cópia do acc2py que veio junto (mesma versão com que o pacote foi gerado)
+_VENDOR = str(_Path(__file__).parent / "_vendor")
+if _VENDOR not in _sys.path and (_Path(_VENDOR) / "acc2py").exists():
+    _sys.path.insert(0, _VENDOR)
 
-from .consultas import CONSULTAS, PEDIDAS, SEQUENCIA, SQL_ORIGINAL, TIPOS  # noqa: F401
+from acc2py.runtime import Database, vbafuncs  # noqa: E402
+from acc2py.runtime import vba as vb  # noqa: E402
+from acc2py.runtime.pacote import Pacote, convert_param  # noqa: E402
+
+from .consultas import CONSULTAS, PEDIDAS, SEQUENCIA, SQL_ORIGINAL, TIPOS  # noqa: F401,E402
 {mod_imports}
 ORIGEM = {str(Path(source).resolve())!r}
-PASTA_DADOS = Path(__file__).parent / "dados"
+PASTA = _Path(__file__).parent
 
 # Funções públicas dos módulos VBA (podem ser chamadas dentro das consultas)
 FUNCOES = {{
@@ -358,15 +436,20 @@ AUTONUMERACAO = {autonumber!r}
 vbafuncs.set_locale({locale!r})
 
 
+def pacote() -> Pacote:
+    return Pacote(PASTA, CONSULTAS, FUNCOES, SEQUENCIA, SQL_ORIGINAL, TIPOS, AUTONUMERACAO, {pkg!r})
+
+
 def abrir(origem=None, backend="auto") -> Database:
     """Carrega as tabelas e devolve o banco com consultas e funções registradas.
 
-    ``origem`` pode ser o .accdb/.mdb original, uma pasta com .parquet/.pkl/.csv
-    (uma tabela por arquivo) ou None ({"a pasta 'dados' exportada" if has_data else "o banco de origem"}).
+    Sem ``origem``: lê os arquivos de entrada configurados (tela ou definir_entrada) e,
+    para tabelas fixas, a cópia em dados/. Com ``origem``: um .accdb/.mdb (precisa do
+    Access, útil na migração) ou uma pasta com um arquivo por tabela.
     """
     if origem is None:
-        origem = PASTA_DADOS if PASTA_DADOS.exists() else ORIGEM
-    if Path(origem).is_dir():
+        db = pacote().abrir()
+    elif _Path(origem).is_dir():
         db = Database.from_folder(origem, CONSULTAS, FUNCOES, autonumber=AUTONUMERACAO)
     else:
         db = Database.from_access(origem, CONSULTAS, FUNCOES, backend=backend,
@@ -376,15 +459,26 @@ def abrir(origem=None, backend="auto") -> Database:
     return db
 
 
-def exportar(destino="resultados.xlsx", consultas=None, parametros=None, db=None):
-    """Roda várias consultas e grava tudo numa saída só.
+def definir_entrada(tabela, arquivo, **opcoes):
+    """Escolhe o arquivo (Excel/CSV/TXT) de uma tabela de entrada; devolve a conferência.
 
-    destino:    "arquivo.xlsx" (uma aba por consulta + aba Resumo) ou uma pasta (um .csv por consulta)
-    consultas:  nomes do Access; padrão = PEDIDAS (as escolhidas na transpilação)
-    parametros: comuns   {{"Data inicial": pd.Timestamp("2026-01-01")}}
-                ou por consulta {{"Vendas por Mês": {{"Ano": 2026}}}}
-    Devolve o resumo (consulta, situação, nº de linhas, erro).
+    opcoes: aba="Plan1", separador=";", encoding="cp1252", linha_cabecalho=1
     """
+    return pacote().definir_entrada(tabela, arquivo, **opcoes)
+
+
+def executar(parametros=None, destino=None, intermediarias=False):
+    """Roda a sequência com as entradas configuradas. Devolve (log das etapas, arquivo de saída)."""
+    pk = pacote()
+    tipos = {{p["nome"].lower(): p["tipo"] for p in pk.parametros_declarados()}}
+    params = {{k: (convert_param(v, tipos.get(k.lower(), "auto")) if isinstance(v, str) else v)
+              for k, v in (parametros or {{}}).items()}}
+    db = abrir()
+    return pk.executar(params, destino, intermediarias, db=db)
+
+
+def exportar(destino="resultados.xlsx", consultas=None, parametros=None, db=None):
+    """Roda várias consultas de seleção independentes e grava tudo numa saída só."""
     from acc2py.runtime.core import export_results
     db = db or abrir()
     return export_results(db, destino, list(consultas or PEDIDAS), parametros)
@@ -392,14 +486,7 @@ def exportar(destino="resultados.xlsx", consultas=None, parametros=None, db=None
 
 def executar_sequencia(destino="saida_final.xlsx", parametros=None, etapas=None,
                        intermediarias=False, db=None):
-    """Roda as consultas EM ORDEM (SEQUENCIA), cada etapa vendo o resultado da anterior.
-
-    Consultas de ação (criar tabela/atualizar/acrescentar/excluir) alteram as tabelas
-    em memória — o banco de origem não é tocado. Se uma etapa falha, a rotina para.
-    Grava em ``destino`` a saída final (última consulta de seleção) + aba "Etapas";
-    ``intermediarias=True`` grava também cada etapa de seleção. ``destino=None`` não grava.
-    Devolve o log das etapas; as tabelas finais ficam em ``db.tables``.
-    """
+    """Roda as consultas EM ORDEM (SEQUENCIA) sobre o banco ``db`` (ou abrir())."""
     from acc2py.runtime.core import run_sequence
     db = db or abrir()
     return run_sequence(db, list(etapas or SEQUENCIA), parametros, destino, intermediarias)
@@ -444,6 +531,15 @@ def _report(res: Result, source, pkg, tables) -> str:
         out += ["", "## Módulos VBA", "", "| Módulo | Arquivo | Situação |", "|---|---|---|"]
         out += [f"| {n} | `{f or '-'}` | {'✅ ' + s if s.startswith('ok') else '❌ ' + s} |"
                 for n, (f, s) in res.modules.items()]
+    if res.inputs:
+        out += ["", "## Tabelas de entrada", "",
+                "Sem o Access, estas tabelas vêm de arquivos. **Mensal**: você informa o arquivo a cada "
+                "execução (tela ou `definir_entrada`). **Fixa**: usa a cópia tirada do Access em `dados/` "
+                "(tabelas de referência/de-para). Mude o modo em `entradas.json` se precisar.", "",
+                "| Tabela | Modo | Vinculada a | Colunas | Usada por |", "|---|---|---|---|---|"]
+        for t, e in res.inputs.items():
+            out.append(f"| {t} | {e['modo']} | {e.get('vinculada') or '-'} | {len(e.get('colunas') or {})} "
+                       f"| {', '.join(e.get('usada_por', [])[:4])} |")
     out += ["", "## Avisos", "", d.to_markdown(),
             "## Como validar", "",
             "1. Rode cada consulta no Access e no Python com os mesmos dados e parâmetros.",

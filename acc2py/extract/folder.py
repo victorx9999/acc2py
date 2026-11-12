@@ -112,6 +112,13 @@ class FolderExtractor:
             return pd.read_parquet(p)
         return pd.read_pickle(p)
 
+    def linked_tables(self) -> dict[str, str]:
+        return {}
+
+    def columns(self, name: str) -> dict[str, str]:
+        from ..runtime.inputs import schema_from_frame
+        return schema_from_frame(self.read_table(name))
+
     def autonumber_columns(self) -> dict[str, str]:
         return {}
 

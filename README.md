@@ -7,10 +7,65 @@ com o SQL/VBA original e acompanhado de um `RELATORIO.md` com tudo que precisa d
 ## Instalação
 
 ```bash
-pip install -e .                    # dentro desta pasta
-pip install -e ".[windows]"         # + leitura direta do .accdb pelo Access (recomendado)
-pip install -e ".[multiplataforma]" # + leitura do .accdb sem Access (Linux/macOS)
+pip install -e ".[windows,excel]"   # Windows com Access: leitura do .accdb + saída em Excel
+pip install -e ".[multiplataforma]" # leitura do .accdb sem Access (Linux/macOS)
 ```
+
+## Migração em duas fases (para quando o Access vai ser desligado)
+
+**Fase 1 — enquanto o Access existe (uma vez por banco)**
+
+```bash
+acc2py --tela                       # abre a tela no navegador
+```
+
+Na aba **Migração**: abra o `.accdb`, monte a **sequência** (busca com curinga, arrastar
+para ordenar), marque cada **tabela de entrada** como *Mensal* (vem de arquivo a cada
+execução) ou *Fixa* (cópia tirada do Access agora: de-para, parâmetros, cadastros),
+confira o Python gerado de cada consulta e clique **Transpilar**.
+
+Depois **valide** contra o Access — só é possível antes do desligamento:
+
+```bash
+acc2py banco.accdb --validar saida/rotina -p "Data inicial=01/01/2026" -r validacao.xlsx
+```
+
+A validação copia o `.accdb` para uma pasta temporária (o original não é tocado), roda a
+sequência no Access e no Python com **as mesmas entradas** e compara cada etapa e o
+estado final das tabelas alteradas. O Excel traz o resumo (IGUAL/DIFERENTE) e as linhas
+divergentes. Ela se recusa a rodar se uma etapa altera uma tabela **vinculada** (a cópia
+continua apontando para a fonte real).
+
+**Fase 2 — dia a dia, sem Access**
+
+O pacote gerado roda sozinho: o runtime vai copiado para dentro dele (`_vendor/`), então
+basta Python + pandas + openpyxl. Dois cliques em `Abrir tela - rotina.bat` (ou
+`python -m rotina`) abrem a aba **Execução**:
+
+1. **Arquivos de entrada** — para cada tabela mensal, escolha o Excel/CSV/TXT do período.
+   A leitura é conferida na hora: colunas faltando, valores que não viram número/data,
+   e aviso se o arquivo é o mesmo da execução anterior.
+2. **Parâmetros** — campos criados a partir dos `PARAMETERS` das consultas; se uma consulta
+   pedir um parâmetro não declarado, o campo aparece e a tela pede para preencher.
+3. **Executar** — andamento etapa por etapa, prévia da saída e botão para baixar o Excel
+   (também gravado em `rotina/saidas/`).
+
+Sem tela, o mesmo em Python:
+
+```python
+from rotina import definir_entrada, executar
+definir_entrada("Movimento", "C:/dados/movimento_jan.xlsx")         # aba=..., separador=...
+etapas, arquivo = executar({"Data inicial": "01/01/2026", "Desconto": "0,1"})
+```
+
+Leitura das entradas: separador e codificação detectados (`;` `,` tab `|`; UTF-8 ou
+Windows-1252); colunas casadas sem diferenciar maiúsculas/acentos; tipos vindos do Access —
+texto continua texto (zeros à esquerda de agência/CPF preservados), `1.234,56` e `31/01/2026`
+convertidos. TXT de largura fixa não é suportado (converta para delimitado).
+
+Os dados ficam fora do controle de versão: o pacote gerado traz um `.gitignore` que exclui
+`dados/`, `entradas/`, `saidas/` e `execucao.json`. **Não suba pacotes gerados (com SQL e
+regras de negócio) para repositórios públicos.**
 
 ## Uso
 
@@ -129,7 +184,7 @@ consultas na mesma ordem. Se é uma **macro**, converta-a antes no Access
 from vendas import abrir
 import pandas as pd
 
-db = abrir()   # lê as tabelas do .accdb (ou da pasta 'dados', se exportada)
+db = abrir()   # lê as entradas configuradas (arquivos) e as tabelas fixas de dados/
 df = db.run("Vendas por Mês", {"Data inicial": pd.Timestamp("2026-01-01")})
 db.run("Reajuste de Preços")           # consulta de ação: devolve nº de linhas afetadas
 db.sql("SELECT Count(*) FROM Clientes") # SQL do Access em tempo de execução
@@ -179,11 +234,10 @@ Scripting.Dictionary, MsgBox/InputBox (configuráveis) e ~100 funções nativas.
 - Subconsultas correlacionadas e `DLookup` linha a linha funcionam, mas são lentos em tabelas grandes: prefira reescrever como JOIN.
 - Consultas pass-through/DDL e tabelas vinculadas a outros bancos não são convertidas.
 
-## Validação recomendada
+## Validação
 
-Para cada consulta convertida, rode no Access e no Python com os mesmos dados e compare com
-`pandas.testing.assert_frame_equal(..., check_dtype=False)`. O `RELATORIO.md` lista tudo o que
-foi aproximado ou não convertido.
+Use `--validar` (fase 1, acima) para cada rotina antes do desligamento do Access. O
+`RELATORIO.md` lista tudo o que foi aproximado ou não convertido.
 
 ## Exemplo incluído
 

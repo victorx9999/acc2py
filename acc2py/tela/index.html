@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>acc2py</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --ink:#1c2430; --muted:#5d6878; --line:#dde2e8; --soft:#eef1f5;
+  --accent:#1f5fbf; --accent-ink:#fff; --ok:#1d7a46; --ok-bg:#e6f4ec; --warn:#9a6200; --warn-bg:#fff4dd;
+  --err:#b42318; --err-bg:#fdecea; --code:#f3f5f8; --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#14181e; --panel:#1c222a; --ink:#e6eaf0; --muted:#9aa5b3; --line:#2e3640; --soft:#242b34;
+    --accent:#6ea2ff; --accent-ink:#0d1420; --ok:#5fd193; --ok-bg:#16301f; --warn:#f0b54d; --warn-bg:#33270f;
+    --err:#ff8a80; --err-bg:#3a1714; --code:#161b21; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;gap:24px;padding:12px 24px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+header h1 span{color:var(--muted);font-weight:400}
+nav{display:flex;gap:4px}
+nav button{background:none;border:0;padding:8px 14px;border-radius:8px;color:var(--muted);font:inherit;cursor:pointer}
+nav button.on{background:var(--soft);color:var(--ink);font-weight:600}
+main{max-width:1400px;margin:0 auto;padding:20px 24px 80px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grow{flex:1;min-width:200px}
+input[type=text],input[type=number],input[type=date],select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.b{display:inline-block;font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.b:hover{background:var(--soft)}
+.b.p{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.b.p:hover{filter:brightness(1.08);background:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+button.i{border:0;background:none;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px;font:inherit}
+button.i:hover{background:var(--soft);color:var(--ink)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.panel h2{font-size:14px;margin:0 0 4px;font-weight:650}
+.panel .sub{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+.grid3{display:grid;grid-template-columns:1.1fr 1fr .9fr;gap:16px;margin-top:16px}
+@media (max-width:1100px){.grid3{grid-template-columns:1fr}}
+.list{border:1px solid var(--line);border-radius:8px;max-height:52vh;overflow:auto}
+.item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.item .nm:hover{text-decoration:underline}
+.item.drag{opacity:.4}
+.item.over{box-shadow:inset 0 2px 0 var(--accent)}
+.handle{cursor:grab;color:var(--muted);user-select:none}
+.num{color:var(--muted);font-variant-numeric:tabular-nums;width:22px;text-align:right}
+.tag{font-size:11px;padding:2px 7px;border-radius:99px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.tag.sel{background:var(--ok-bg);color:var(--ok)}
+.tag.acao{background:var(--warn-bg);color:var(--warn)}
+.tag.err{background:var(--err-bg);color:var(--err)}
+.empty{color:var(--muted);padding:18px;text-align:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--panel);color:var(--muted);padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+.bar{position:sticky;bottom:0;margin-top:16px}
+.note{font-size:12.5px;color:var(--muted)}
+.msg{padding:10px 12px;border-radius:8px;margin-top:10px}
+.msg.ok{background:var(--ok-bg);color:var(--ok)}
+.msg.warn{background:var(--warn-bg);color:var(--warn)}
+.msg.err{background:var(--err-bg);color:var(--err);white-space:pre-wrap}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.card{border:1px solid var(--line);border-radius:var(--radius);padding:14px;background:var(--panel)}
+.card h3{margin:0;font-size:14px;display:flex;gap:8px;align-items:center}
+.card .file{font-size:12.5px;color:var(--muted);word-break:break-all;margin:6px 0}
+.status{font-size:12.5px;margin:6px 0 10px}
+.status.ok{color:var(--ok)}.status.warn{color:var(--warn)}.status.err{color:var(--err)}
+details{margin-top:8px}
+details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+.opts{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;margin-top:8px;font-size:12.5px}
+.cols{font-size:12px;color:var(--muted);margin-top:6px}
+.params{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.params label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px}
+.params input{width:100%}
+.steps{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+.steps th,.steps td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.steps th{color:var(--muted);font-weight:600;font-size:12px}
+pre.log{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow:auto;font:12px/1.5 ui-monospace,Consolas,monospace;margin:12px 0 0;white-space:pre-wrap}
+.tablewrap{overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:8px;margin-top:10px}
+.tablewrap table{border-collapse:collapse;font-size:12.5px;min-width:100%}
+.tablewrap th,.tablewrap td{padding:5px 9px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tablewrap th{position:sticky;top:0;background:var(--soft);text-align:left}
+.section{margin-top:20px}
+.section > .hd{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.section > .hd .n{width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.section > .hd h2{margin:0;font-size:15px}
+.modal{position:fixed;inset:0;background:rgba(10,14,20,.45);display:none;align-items:center;justify-content:center;padding:24px;z-index:20}
+.modal.on{display:flex}
+.modal .box{background:var(--panel);border-radius:12px;max-width:1300px;width:100%;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--line)}
+.modal .top{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);gap:10px}
+.modal .top h3{margin:0;font-size:15px;flex:1}
+.modal .two{display:grid;grid-template-columns:1fr 1.4fr;gap:0;overflow:hidden;flex:1;min-height:0}
+@media (max-width:900px){.modal .two{grid-template-columns:1fr}}
+.modal .pane{overflow:auto;padding:12px 16px;border-right:1px solid var(--line)}
+.modal .pane:last-child{border-right:0}
+.modal .pane h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.modal pre{margin:0;font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:3px 10px;background:var(--panel)}
+.chip b{color:var(--muted);font-weight:500;margin-right:4px}
+.hidden{display:none !important}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
+@keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>acc2py <span>· Access → Python</span></h1>
+  <nav>
+    <button id="tab-mig" onclick="aba('mig')">1. Migração</button>
+    <button id="tab-exe" onclick="aba('exe')">2. Execução</button>
+  </nav>
+  <div class="grow"></div>
+  <span class="note" id="hdr-pacote"></span>
+</header>
+
+<main>
+<!-- ============================== MIGRAÇÃO ============================== -->
+<section id="v-mig">
+  <div class="panel">
+    <h2>Banco de origem</h2>
+    <p class="sub">Arquivo .accdb/.mdb (precisa do Access nesta máquina) ou uma pasta com consultas e módulos exportados.</p>
+    <div class="row">
+      <input type="text" id="origem" class="grow" placeholder="C:\caminho\banco.accdb">
+      <button class="b" onclick="procurarOrigem('arquivo')">Procurar arquivo…</button>
+      <button class="b" onclick="procurarOrigem('pasta')">Pasta…</button>
+      <button class="b p" id="btn-abrir" onclick="abrirBanco()">Abrir</button>
+    </div>
+    <div id="mig-msg"></div>
+  </div>
+
+  <div class="grid3 hidden" id="mig-grid">
+    <div class="panel">
+      <h2>Consultas do banco <span class="note" id="q-count"></span></h2>
+      <p class="sub">Clique no nome para ver o SQL e o Python gerado. Use <b>+</b> para pôr na sequência.</p>
+      <div class="row" style="margin-bottom:8px">
+        <input type="text" id="busca" class="grow" placeholder="Buscar… (aceita * e ?)" oninput="renderConsultas()">
+        <div class="seg" id="filtro">
+          <button class="on" data-f="todas">Todas</button><button data-f="sel">Seleção</button><button data-f="acao">Ação</button>
+        </div>
+      </div>
+      <div class="list" id="lista-consultas"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="b" onclick="adicionarVisiveis()">+ Adicionar todas as visíveis</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Sequência <span class="note">(ordem de execução)</span></h2>
+      <p class="sub">Arraste para reordenar. A última consulta de seleção é a saída final.</p>
+      <div class="list" id="lista-seq"></div>
+      <div class="note" id="automaticas" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="b" onclick="limparSeq()">Limpar</button>
+        <button class="b" onclick="ordenarSeq()">Ordenar por nome</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Tabelas de entrada</h2>
+      <p class="sub"><b>Mensal</b>: vem de um arquivo Excel/CSV/TXT a cada execução. <b>Fixa</b>: usa a cópia tirada do Access agora (tabelas de referência, de-para).</p>
+      <div class="list" id="lista-entradas"><div class="empty">Monte a sequência para ver as tabelas.</div></div>
+    </div>
+  </div>
+
+  <div class="panel bar hidden" id="mig-bar">
+    <div class="row">
+      <label class="note">Pasta de saída</label>
+      <input type="text" id="saida" class="grow">
+      <label class="note">Nome do pacote</label>
+      <input type="text" id="pacote" style="width:200px" placeholder="(nome do banco)">
+      <button class="b p" id="btn-transp" onclick="transpilar()">Transpilar</button>
+    </div>
+    <div id="transp-res"></div>
+  </div>
+</section>
+
+<!-- ============================== EXECUÇÃO ============================== -->
+<section id="v-exe" class="hidden">
+  <div class="panel hidden" id="exe-sem">
+    <h2>Nenhum pacote aberto</h2>
+    <p class="sub">Transpile na aba Migração ou abra a pasta de um pacote já gerado.</p>
+    <div class="row">
+      <input type="text" id="pasta-pacote" class="grow" placeholder="C:\saida\meu_pacote">
+      <button class="b" onclick="procurarPacote()">Procurar…</button>
+      <button class="b p" onclick="usarPacote()">Abrir pacote</button>
+    </div>
+    <div id="exe-sem-msg"></div>
+  </div>
+
+  <div id="exe-com" class="hidden">
+    <div class="panel">
+      <div class="row"><h2 class="grow" id="exe-titulo"></h2><span class="note" id="exe-ultima"></span></div>
+      <div class="chips" id="exe-seq" style="margin-top:8px"></div>
+    </div>
+
+    <div class="section">
+      <div class="hd"><span class="n">1</span><h2>Arquivos de entrada</h2><span class="note">Excel (.xlsx/.xls), CSV ou TXT delimitado</span></div>
+      <div class="cards" id="cards-entradas"></div>
+    </div>
+
+    <div class="section">
+      <div class="hd"><span class="n">2</span><h2>Parâmetros</h2></div>
+      <div class="panel"><div class="params" id="params"></div>
+        <div class="row" style="margin-top:10px">
+          <input type="text" id="novo-param" placeholder="Outro parâmetro (nome)" style="width:260px">
+          <button class="b" onclick="addParam()">Adicionar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="hd"><span class="n">3</span><h2>Executar</h2></div>
+      <div class="panel">
+        <div class="row">
+          <button class="b p" id="btn-exec" onclick="executar()">Executar sequência</button>
+          <label class="note"><input type="checkbox" id="intermed"> gravar também o resultado de cada etapa</label>
+        </div>
+        <div id="exec-msg"></div>
+        <pre class="log hidden" id="exec-log"></pre>
+        <table class="steps hidden" id="exec-steps"></table>
+        <div id="exec-saida"></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<div class="modal" id="modal" onclick="if(event.target===this)fecharModal()">
+  <div class="box">
+    <div class="top"><h3 id="m-titulo"></h3><button class="b" id="m-add">+ Sequência</button><button class="b" onclick="fecharModal()">Fechar</button></div>
+    <div id="m-avisos" style="padding:0 16px"></div>
+    <div class="two">
+      <div class="pane"><h4>SQL do Access</h4><pre id="m-sql"></pre></div>
+      <div class="pane"><h4>Python gerado</h4><pre id="m-py"></pre></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+const S = {consultas:[], seq:[], filtro:'todas', modos:{}, pacote:null, poll:null};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function api(path, body, raw){
+  const opt = {method: body===undefined ? 'GET' : 'POST', headers:{'X-Token':TOKEN}};
+  if (body!==undefined){ if(raw){opt.body=body} else {opt.body=JSON.stringify(body); opt.headers['Content-Type']='application/json'} }
+  const r = await fetch(path, opt); const j = await r.json();
+  if (!r.ok) throw new Error(j.erro || r.statusText);
+  return j;
+}
+function msg(el, tipo, texto){ $(el).innerHTML = texto ? `<div class="msg ${tipo}">${texto}</div>` : '' }
+function busy(btn, on, label){ const b=$(btn); if(on){b.dataset.l=b.innerHTML; b.innerHTML=`<span class="spin"></span> ${label||''}`; b.disabled=true} else {b.innerHTML=b.dataset.l||b.innerHTML; b.disabled=false} }
+function aba(a){
+  $('v-mig').classList.toggle('hidden', a!=='mig'); $('v-exe').classList.toggle('hidden', a!=='exe');
+  $('tab-mig').classList.toggle('on', a==='mig'); $('tab-exe').classList.toggle('on', a==='exe');
+  if (a==='exe') carregarPacote();
+}
+const tipoClasse = t => t==='seleção' ? 'sel' : (t==='?'||!t ? '' : 'acao');
+
+/* ------------------------------ migração ------------------------------ */
+async function procurarOrigem(tipo){
+  try{ const r = await api('/api/procurar', {tipo, filtros: tipo==='arquivo'?[['Access','*.accdb *.mdb'],['Todos','*.*']]:null});
+       if (r.caminho){ $('origem').value = r.caminho; abrirBanco() } }
+  catch(e){ msg('mig-msg','warn', esc(e.message)) }
+}
+async function abrirBanco(){
+  const origem = $('origem').value.trim(); if(!origem) return;
+  busy('btn-abrir', true, 'Abrindo'); msg('mig-msg');
+  try{
+    const r = await api('/api/abrir', {origem});
+    S.consultas = r.consultas; S.seq = []; S.modos = {};
+    $('mig-grid').classList.remove('hidden'); $('mig-bar').classList.remove('hidden');
+    $('q-count').textContent = `(${r.consultas.length})`;
+    const nerr = r.consultas.filter(c=>c.erro).length;
+    msg('mig-msg', nerr?'warn':'ok', `${r.consultas.length} consultas, ${r.tabelas.length} tabelas (${Object.keys(r.vinculadas).length} vinculadas), ${r.modulos.length} módulos VBA.` + (nerr?` ${nerr} consulta(s) com erro de leitura do SQL.`:''));
+    renderConsultas(); renderSeq();
+  }catch(e){ msg('mig-msg','err', esc(e.message)) }
+  busy('btn-abrir', false);
+}
+function wild(q){ if(!/[*?]/.test(q)) return s => s.toLowerCase().includes(q.toLowerCase());
+  const re = new RegExp('^' + q.replace(/[.+^${}()|[\]\\]/g,'\\$&').replace(/\*/g,'.*').replace(/\?/g,'.') + '$', 'i'); return s => re.test(s) }
+function visiveis(){
+  const q = $('busca').value.trim(); const m = q ? wild(q) : ()=>true;
+  return S.consultas.filter(c => m(c.nome) && (S.filtro==='todas' || (S.filtro==='sel' ? c.tipo==='seleção' : c.tipo!=='seleção')));
+}
+function renderConsultas(){
+  const vs = visiveis();
+  $('lista-consultas').innerHTML = vs.length ? vs.map(c => {
+    const na = S.seq.includes(c.nome);
+    return `<div class="item"><button class="i" title="${na?'Já está na sequência':'Pôr na sequência'}" ${na?'disabled':''} onclick='addSeq(${JSON.stringify(c.nome)})'>${na?'✓':'+'}</button>
+      <span class="nm" onclick='previa(${JSON.stringify(c.nome)})' title="${esc(c.nome)}">${esc(c.nome)}</span>
+      ${c.erro?'<span class="tag err" title="'+esc(c.erro)+'">erro</span>':''}
+      <span class="tag ${tipoClasse(c.tipo)}">${esc(c.tipo)}</span></div>`}).join('')
+    : '<div class="empty">Nenhuma consulta encontrada.</div>';
+}
+document.querySelectorAll('#filtro button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#filtro button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); S.filtro=b.dataset.f; renderConsultas(); });
+function natural(a,b){ return a.localeCompare(b, 'pt-BR', {numeric:true, sensitivity:'base'}) }
+function addSeq(n){ if(!S.seq.includes(n)) S.seq.push(n); renderSeq(); renderConsultas() }
+function adicionarVisiveis(){ visiveis().map(c=>c.nome).sort(natural).forEach(n=>{ if(!S.seq.includes(n)) S.seq.push(n) }); renderSeq(); renderConsultas() }
+function limparSeq(){ S.seq=[]; renderSeq(); renderConsultas() }
+function ordenarSeq(){ S.seq.sort(natural); renderSeq() }
+function mover(i,d){ const j=i+d; if(j<0||j>=S.seq.length) return; [S.seq[i],S.seq[j]]=[S.seq[j],S.seq[i]]; renderSeq() }
+function remover(i){ S.seq.splice(i,1); renderSeq(); renderConsultas() }
+function renderSeq(){
+  const tipo = n => (S.consultas.find(c=>c.nome===n)||{}).tipo;
+  $('lista-seq').innerHTML = S.seq.length ? S.seq.map((n,i)=>`<div class="item" draggable="true" data-i="${i}">
+     <span class="handle" title="Arraste">⋮⋮</span><span class="num">${i+1}</span>
+     <span class="nm" onclick='previa(${JSON.stringify(n)})'>${esc(n)}</span><span class="tag ${tipoClasse(tipo(n))}">${esc(tipo(n))}</span>
+     <button class="i" onclick="mover(${i},-1)" title="Subir">↑</button><button class="i" onclick="mover(${i},1)" title="Descer">↓</button><button class="i" onclick="remover(${i})" title="Remover">✕</button></div>`).join('')
+    : '<div class="empty">Adicione consultas na ordem em que rodam no Access.</div>';
+  let src=null;
+  $('lista-seq').querySelectorAll('.item').forEach(el=>{
+    el.addEventListener('dragstart',()=>{src=+el.dataset.i; el.classList.add('drag')});
+    el.addEventListener('dragend',()=>el.classList.remove('drag'));
+    el.addEventListener('dragover',e=>{e.preventDefault(); el.classList.add('over')});
+    el.addEventListener('dragleave',()=>el.classList.remove('over'));
+    el.addEventListener('drop',e=>{e.preventDefault(); el.classList.remove('over'); const dst=+el.dataset.i; if(src===null||src===dst) return;
+      const [x]=S.seq.splice(src,1); S.seq.splice(dst,0,x); renderSeq() });
+  });
+  atualizarEntradas();
+}
+async function atualizarEntradas(){
+  if(!S.seq.length){ $('lista-entradas').innerHTML='<div class="empty">Monte a sequência para ver as tabelas.</div>'; $('automaticas').textContent=''; return }
+  try{
+    const r = await api('/api/entradas_previstas', {consultas:S.seq});
+    $('automaticas').innerHTML = r.automaticas.length ? `<b>Entram automaticamente</b> (usadas pelas da sequência): ${r.automaticas.map(esc).join(', ')}` : '';
+    $('lista-entradas').innerHTML = r.entradas.length ? r.entradas.map(e=>{
+      const m = S.modos[e.tabela] || e.modo;
+      return `<div class="item"><span class="nm" title="Usada por: ${esc(e.usada_por.join(', '))}">${esc(e.tabela)}${e.vinculada?' <span class="tag" title="'+esc(e.vinculada)+'">vinculada</span>':''}</span>
+        <div class="seg"><button class="${m==='mensal'?'on':''}" onclick='setModo(${JSON.stringify(e.tabela)},"mensal")'>Mensal</button><button class="${m==='fixa'?'on':''}" onclick='setModo(${JSON.stringify(e.tabela)},"fixa")'>Fixa</button></div></div>`}).join('')
+      : '<div class="empty">A sequência não lê tabelas.</div>';
+  }catch(e){ $('lista-entradas').innerHTML = `<div class="empty">${esc(e.message)}</div>` }
+}
+function setModo(t,m){ S.modos[t]=m; atualizarEntradas() }
+async function previa(n){
+  $('m-titulo').textContent = n; $('m-sql').textContent='…'; $('m-py').textContent='…'; $('m-avisos').innerHTML='';
+  $('m-add').onclick = ()=>{ addSeq(n); fecharModal() }; $('m-add').disabled = S.seq.includes(n);
+  $('modal').classList.add('on');
+  try{ const r = await api('/api/previa', {nome:n}); $('m-sql').textContent=r.sql; $('m-py').textContent=r.python;
+    $('m-avisos').innerHTML = r.avisos.map(a=>`<div class="msg ${a.nivel==='erro'?'err':a.nivel==='aviso'?'warn':'ok'}">${esc(a.mensagem)}</div>`).join('') }
+  catch(e){ $('m-py').textContent = e.message }
+}
+function fecharModal(){ $('modal').classList.remove('on') }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') fecharModal() });
+async function transpilar(){
+  if(!S.seq.length){ msg('transp-res','warn','Monte a sequência antes de transpilar.'); return }
+  busy('btn-transp', true, 'Transpilando'); msg('transp-res');
+  try{
+    const r = await api('/api/transpilar', {origem:$('origem').value.trim(), saida:$('saida').value.trim(), pacote:$('pacote').value.trim(), sequencia:S.seq, modos:S.modos});
+    const nq = Object.keys(r.consultas).length, okq = Object.values(r.consultas).filter(s=>s==='ok').length;
+    const itens = r.itens.filter(i=>i.nivel!=='info').slice(0,30).map(i=>`<li><b>${esc(i.onde)}</b>: ${esc(i.mensagem)}</li>`).join('');
+    $('transp-res').innerHTML = `<div class="msg ${r.erros?'warn':'ok'}">Pacote gerado em <b>${esc(r.pacote)}</b> — ${okq}/${nq} consultas convertidas, ${r.erros} erro(s), ${r.avisos} aviso(s). Detalhes em RELATORIO.md.
+      ${itens?'<ul style="margin:8px 0 0">'+itens+'</ul>':''}</div>
+      <div class="row" style="margin-top:10px"><button class="b p" onclick='irExecucao(${JSON.stringify(r.pacote)})'>Ir para execução →</button></div>`;
+  }catch(e){ msg('transp-res','err', esc(e.message)) }
+  busy('btn-transp', false);
+}
+async function irExecucao(p){ try{ await api('/api/usar_pacote',{pasta:p}); aba('exe') }catch(e){ msg('transp-res','err',esc(e.message)) } }
+
+/* ------------------------------ execução ------------------------------ */
+async function procurarPacote(){ try{ const r=await api('/api/procurar',{tipo:'pasta'}); if(r.caminho) $('pasta-pacote').value=r.caminho }catch(e){ msg('exe-sem-msg','warn',esc(e.message)) } }
+async function usarPacote(){ try{ await api('/api/usar_pacote',{pasta:$('pasta-pacote').value.trim()}); carregarPacote() }catch(e){ msg('exe-sem-msg','err',esc(e.message)) } }
+async function carregarPacote(){
+  let p; try{ p = await api('/api/pacote') }catch(e){ $('exe-sem').classList.remove('hidden'); $('exe-com').classList.add('hidden'); return }
+  S.pacote = p; $('exe-sem').classList.add('hidden'); $('exe-com').classList.remove('hidden');
+  $('hdr-pacote').textContent = 'Pacote: ' + p.nome;
+  $('exe-titulo').textContent = `${p.nome} — ${p.sequencia.length} etapa(s)`;
+  const u = p.ultima_execucao; $('exe-ultima').textContent = u ? `Última execução: ${u.quando.replace('T',' ')} ${u.ok?'(ok)':'(com erro)'}` : 'Ainda não executado';
+  $('exe-seq').innerHTML = p.sequencia.map((s,i)=>`<span class="chip"><b>${i+1}</b>${esc(s.nome)}</span>`).join('') || '<span class="note">Sem sequência definida.</span>';
+  renderEntradas(p.entradas); renderParams(p.parametros);
+}
+function statusEntrada(e){
+  if (e.origem==='arquivo') return e.mesmo_arquivo_da_ultima && e.modo==='mensal' ? ['warn','Mesmo arquivo da última execução — confira se é o do período certo'] : ['ok','Arquivo escolhido'];
+  if (e.origem==='copia') return ['ok','Usando a cópia tirada do Access (tabela fixa)'];
+  return ['err','Falta escolher o arquivo'];
+}
+function renderEntradas(lista){
+  $('cards-entradas').innerHTML = lista.length ? lista.map(e=>{
+    const [cls, txt] = statusEntrada(e); const o = e.opcoes||{}; const id = 'f_'+btoa(unescape(encodeURIComponent(e.tabela))).replace(/[^a-z0-9]/gi,'');
+    const cols = Object.entries(e.colunas||{}).map(([c,t])=>`${esc(c)} <i>(${t})</i>`).join(', ');
+    return `<div class="card" data-t="${esc(e.tabela)}">
+      <h3>${esc(e.tabela)} <span class="tag ${e.modo==='mensal'?'acao':''}">${e.modo}</span>${e.vinculada?'<span class="tag" title="'+esc(e.vinculada)+'">era vinculada</span>':''}</h3>
+      <div class="status ${cls}">${txt}</div>
+      <div class="file">${e.arquivo?esc(e.arquivo):''}</div>
+      <div class="chk"></div>
+      <div class="row">
+        <input type="file" id="${id}" class="hidden" accept=".xlsx,.xls,.xlsm,.csv,.txt,.tsv" onchange='upload(${JSON.stringify(e.tabela)}, this)'>
+        <button class="b" onclick="document.getElementById('${id}').click()">Escolher arquivo…</button>
+        <button class="b" onclick='caminho(${JSON.stringify(e.tabela)})' title="Usa o arquivo no lugar onde está, sem copiar">Usar do local…</button>
+      </div>
+      <details><summary>Opções de leitura e colunas esperadas</summary>
+        <div class="opts">
+          <label>Aba (Excel)</label><input type="text" data-o="aba" value="${esc(o.aba||'')}" placeholder="primeira">
+          <label>Separador</label><select data-o="separador">${['','\\t',';',',','|'].map(s=>`<option value="${s}" ${(o.separador||'')===s?'selected':''}>${s===''?'automático':s==='\\t'?'tabulação':s}</option>`).join('')}</select>
+          <label>Linha do cabeçalho</label><input type="number" min="1" data-o="linha_cabecalho" value="${esc(o.linha_cabecalho||1)}">
+          <label>Codificação</label><select data-o="encoding">${['','cp1252','utf-8','latin-1'].map(s=>`<option value="${s}" ${(o.encoding||'')===s?'selected':''}>${s||'automática'}</option>`).join('')}</select>
+        </div>
+        <div class="row" style="margin-top:8px"><button class="b" onclick='aplicarOpcoes(${JSON.stringify(e.tabela)}, this)'>Aplicar e reler</button></div>
+        <div class="cols">${cols?'Colunas esperadas: '+cols:'Sem esquema de colunas.'}</div>
+      </details></div>`}).join('') : '<div class="note">Esta sequência não lê tabelas.</div>';
+}
+function cardDe(t){ return [...document.querySelectorAll('.card')].find(c=>c.dataset.t===t) }
+function mostrarChecagem(t, c){
+  const el = cardDe(t).querySelector('.chk');
+  const cls = c.erro ? 'err' : (c.faltando.length ? 'err' : (c.conversoes.length ? 'warn':'ok'));
+  el.innerHTML = `<div class="msg ${cls}" style="margin:0 0 10px">${esc(c.resumo)}</div>`;
+}
+async function upload(t, input){
+  const f = input.files[0]; if(!f) return;
+  const el = cardDe(t).querySelector('.chk'); el.innerHTML = '<div class="note"><span class="spin"></span> Lendo…</div>';
+  try{ const r = await api(`/api/entrada_upload?tabela=${encodeURIComponent(t)}&arquivo=${encodeURIComponent(f.name)}`, f, true);
+       await carregarPacote(); mostrarChecagem(t, r.checagem) }
+  catch(e){ el.innerHTML = `<div class="msg err">${esc(e.message)}</div>` }
+}
+async function caminho(t){
+  try{ const r = await api('/api/procurar', {tipo:'arquivo', filtros:[['Planilhas e textos','*.xlsx *.xls *.xlsm *.csv *.txt *.tsv'],['Todos','*.*']]});
+       if(!r.caminho) return; const c = await api('/api/entrada_caminho', {tabela:t, caminho:r.caminho}); await carregarPacote(); mostrarChecagem(t, c.checagem) }
+  catch(e){ const p = prompt('Caminho completo do arquivo para '+t+':'); if(!p) return;
+       try{ const c = await api('/api/entrada_caminho', {tabela:t, caminho:p}); await carregarPacote(); mostrarChecagem(t, c.checagem) }catch(e2){ alert(e2.message) } }
+}
+async function aplicarOpcoes(t, btn){
+  const card = btn.closest('.card'); const opcoes = {};
+  card.querySelectorAll('[data-o]').forEach(i=>{ if(i.value!=='') opcoes[i.dataset.o] = i.dataset.o==='linha_cabecalho' ? +i.value : i.value });
+  try{ const c = await api('/api/entrada_opcoes', {tabela:t, opcoes}); await carregarPacote(); mostrarChecagem(t, c.checagem) }
+  catch(e){ card.querySelector('.chk').innerHTML = `<div class="msg err">${esc(e.message)}</div>` }
+}
+function inputParam(p){
+  const t = p.tipo==='data' ? 'date' : (p.tipo==='inteiro'||p.tipo==='numero') ? 'text' : 'text';
+  const ph = p.tipo==='numero' ? 'ex.: 0,15' : p.tipo==='inteiro' ? 'ex.: 2026' : '';
+  return `<div><label>${esc(p.nome)} <span class="note">· ${esc(p.tipo_access||p.tipo)}</span></label>
+    <input type="${t}" data-p="${esc(p.nome)}" value="${esc(p.valor??'')}" placeholder="${ph}"></div>`;
+}
+function renderParams(ps){ $('params').innerHTML = ps.length ? ps.map(inputParam).join('') : '<div class="note">Nenhum parâmetro declarado. Se a execução pedir algum, ele aparece aqui.</div>' }
+function addParam(nome){
+  nome = nome || $('novo-param').value.trim(); if(!nome) return;
+  if([...document.querySelectorAll('[data-p]')].some(i=>i.dataset.p.toLowerCase()===nome.toLowerCase())) return;
+  if(!document.querySelector('[data-p]')) $('params').innerHTML='';
+  $('params').insertAdjacentHTML('beforeend', inputParam({nome, tipo:'auto', tipo_access:'não declarado'})); $('novo-param').value='';
+}
+function restaurarParams(vals){ Object.entries(vals).forEach(([k,v])=>{ addParam(k); const i=[...document.querySelectorAll('[data-p]')].find(x=>x.dataset.p===k); if(i) i.value=v }) }
+function lerParams(){ const o={}; document.querySelectorAll('[data-p]').forEach(i=>{ if(i.value!=='') o[i.dataset.p]=i.value }); return o }
+async function executar(){
+  busy('btn-exec', true, 'Executando'); msg('exec-msg'); $('exec-saida').innerHTML=''; $('exec-steps').classList.add('hidden');
+  $('exec-log').classList.remove('hidden'); $('exec-log').textContent='';
+  try{ await api('/api/executar', {parametros:lerParams(), intermediarias:$('intermed').checked}) }
+  catch(e){ msg('exec-msg','err',esc(e.message)); busy('btn-exec', false); return }
+  clearInterval(S.poll);
+  S.poll = setInterval(async ()=>{
+    const j = await api('/api/progresso'); $('exec-log').textContent = j.log.join('\n'); $('exec-log').scrollTop = 1e9;
+    if (j.rodando) return;
+    clearInterval(S.poll); busy('btn-exec', false); const vals = lerParams(); await carregarPacote(); restaurarParams(vals); mostrarResultado(j.resultado||{});
+  }, 600);
+}
+function mostrarResultado(r){
+  if (r.checagens){ msg('exec-msg','err','Corrija as entradas antes de executar:\n' + r.checagens.filter(c=>!c.ok).map(c=>`• ${c.tabela}: ${c.resumo}`).join('\n')); return }
+  if (r.erro && !r.etapas){ msg('exec-msg','err', esc(r.erro)); return }
+  const st = $('exec-steps'); st.classList.remove('hidden');
+  st.innerHTML = '<tr><th>#</th><th>Consulta</th><th>Tipo</th><th>Linhas</th><th>Tempo (s)</th><th>Situação</th></tr>' +
+    r.etapas.map(e=>`<tr><td>${e.Etapa}</td><td>${esc(e.Consulta)}</td><td>${esc(e.Tipo)}</td><td>${e.Linhas}</td><td>${e.Segundos}</td>
+      <td>${e['Situação']==='ok'?'<span class="tag sel">ok</span>':`<span class="tag err">${esc(e['Situação'])}</span> <span class="note">${esc(e.Erro)}</span>`}</td></tr>`).join('');
+  if (r.falta_parametro){ addParam(r.falta_parametro); msg('exec-msg','warn',`A consulta pediu o parâmetro <b>${esc(r.falta_parametro)}</b>. Preencha o campo que apareceu em Parâmetros e execute de novo.`); return }
+  if (!r.ok){ msg('exec-msg','err','A sequência parou numa etapa com erro (veja a tabela). As etapas seguintes não foram executadas.'); return }
+  msg('exec-msg','ok', `Concluído. Saída gravada em <b>${esc(r.caminho)}</b>`);
+  let html = `<div class="row" style="margin-top:10px"><a class="b p" style="text-decoration:none" href="/api/baixar?t=${encodeURIComponent(TOKEN)}&arquivo=${encodeURIComponent(r.arquivo)}">Baixar ${esc(r.arquivo)}</a></div>`;
+  if (r.previa){ html += `<div class="note" style="margin-top:12px">Prévia — ${esc(r.previa.aba)} (até 200 linhas)</div><div class="tablewrap"><table><tr>${r.previa.colunas.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>` +
+    r.previa.linhas.map(l=>`<tr>${l.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('') + '</table></div>' }
+  $('exec-saida').innerHTML = html;
+}
+
+/* ------------------------------ início ------------------------------ */
+(async ()=>{
+  try{
+    const e = await api('/api/estado'); $('saida').value = e.saida; if(e.origem) $('origem').value = e.origem;
+    if (e.modo==='execucao'){ $('tab-mig').classList.add('hidden'); aba('exe') } else { aba('mig'); if(e.origem) abrirBanco() }
+  }catch(err){ document.querySelector('main').innerHTML = `<div class="msg err">Não foi possível falar com o acc2py (${esc(err.message)}). Abra o endereço completo mostrado no terminal.</div>` }
+})();
+</script>
+</body>
+</html>

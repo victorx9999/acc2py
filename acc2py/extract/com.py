@@ -100,6 +100,21 @@ class ComExtractor:
             frame[c] = [_convert(v) for v in values]
         return pd.DataFrame(frame)
 
+    def linked_tables(self) -> dict[str, str]:
+        """Tabelas vinculadas -> origem (Connect + tabela de origem)."""
+        out = {}
+        for td in self.db.TableDefs:
+            if td.Name.startswith(("MSys", "~")):
+                continue
+            if td.Connect:
+                out[td.Name] = f"{td.Connect} | {td.SourceTableName}"
+        return out
+
+    def columns(self, name: str) -> dict[str, str]:
+        from ..runtime.inputs import ACCESS_DAO_TYPES
+        td = self.db.TableDefs(name)
+        return {f.Name: ACCESS_DAO_TYPES.get(int(f.Type), "texto") for f in td.Fields}
+
     def autonumber_columns(self) -> dict[str, str]:
         out = {}
         for name in self.table_names():

@@ -21,3 +21,6 @@ acc2py = "acc2py.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["acc2py*"]
+
+[tool.setuptools.package-data]
+acc2py = ["tela/*.html"]

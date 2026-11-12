@@ -22,7 +22,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="acc2py",
         description="Transpila consultas SQL e módulos VBA do Microsoft Access para Python/pandas.")
-    ap.add_argument("origem", help="arquivo .accdb/.mdb ou pasta com objetos exportados")
+    ap.add_argument("origem", nargs="?", help="arquivo .accdb/.mdb ou pasta com objetos exportados")
     ap.add_argument("-o", "--saida", default="saida_acc2py", help="pasta de saída (padrão: saida_acc2py)")
     ap.add_argument("-c", "--consultas", nargs="+", metavar="NOME",
                     help="só estas consultas (e as que elas usam). Sem esta opção: todas")
@@ -32,6 +32,16 @@ def main(argv=None):
                     help="arquivo com as consultas NA ORDEM em que rodam (uma por linha). Com "
                          "--resultado, executa as etapas em ordem (inclusive as de ação) e grava "
                          "a saída final")
+    ap.add_argument("--mensais", nargs="+", metavar="TABELA",
+                    help="tabelas de entrada que mudam a cada execução (vêm de arquivo). As demais "
+                         "locais ficam 'fixas' (cópia do Access). Vinculadas já são mensais")
+    ap.add_argument("--todas-mensais", action="store_true",
+                    help="todas as tabelas de entrada vêm de arquivo a cada execução")
+    ap.add_argument("--validar", metavar="PASTA_DO_PACOTE",
+                    help="roda a SEQUENCIA do pacote no Access (numa cópia do banco) e no Python com as "
+                         "mesmas entradas e compara. Grava o relatório em --resultado (padrão validacao.xlsx)")
+    ap.add_argument("--tela", action="store_true",
+                    help="abre a tela interativa (migração) no navegador")
     ap.add_argument("--etapas-intermediarias", action="store_true",
                     help="com --sequencia: grava também o resultado de cada etapa de seleção")
     ap.add_argument("-r", "--resultado", metavar="DESTINO",
@@ -54,6 +64,20 @@ def main(argv=None):
     ap.add_argument("--listar", action="store_true", help="só lista consultas, módulos e tabelas")
     args = ap.parse_args(argv)
 
+    if args.tela:
+        from .tela import servir
+        return servir(origem=args.origem, saida=args.saida)
+    if not args.origem:
+        ap.error("informe o arquivo .accdb/.mdb (ou use --tela)")
+    if args.validar:
+        from .validacao import validar
+        destino = args.resultado or "validacao.xlsx"
+        resumo = validar(args.origem, args.validar, _parse_params(args.param), destino)
+        ruins = resumo[resumo["Resultado"] != "IGUAL"] if len(resumo) else resumo
+        print(f"Validação gravada em: {destino}")
+        print("TUDO IGUAL ao Access." if len(resumo) and ruins.empty else
+              f"{len(ruins)} item(ns) com diferença ou erro — veja o relatório.")
+        return 0 if len(resumo) and ruins.empty else 3
     if args.listar:
         from .extract import open_extractor
         ex = open_extractor(args.origem, args.backend)
@@ -91,7 +115,9 @@ def main(argv=None):
     res = transpile_database(args.origem, args.saida, queries=queries or None, sequence=sequence or None, modules=args.modulos,
                              no_vba=args.sem_vba, backend=args.backend,
                              export_data=args.exportar_dados, locale=args.locale,
-                             include_hidden=args.incluir_ocultas, package=args.pacote)
+                             include_hidden=args.incluir_ocultas, package=args.pacote,
+                             input_modes={t: "mensal" for t in (args.mensais or [])},
+                             all_monthly=args.todas_mensais)
     d = res.diags
     ok_q = sum(1 for _, s in res.queries.values() if s == "ok")
     ok_m = sum(1 for _, s in res.modules.values() if s.startswith("ok"))
@@ -101,6 +127,9 @@ def main(argv=None):
     if res.modules:
         print(f"  módulos VBA: {ok_m}/{len(res.modules)} convertidos")
     print(f"  avisos: {d.count('erro')} erro(s), {d.count('aviso')} aviso(s) — veja RELATORIO.md")
+    if res.inputs:
+        mens = [t for t, e in res.inputs.items() if e["modo"] == "mensal"]
+        print(f"  entradas: {len(res.inputs)} tabela(s), {len(mens)} mensal(is): {', '.join(mens) or '-'}")
     if res.sequence:
         print(f"  sequência: {len(res.sequence)} etapa(s) em SEQUENCIA (consultas.py)")
     if args.resultado and res.sequence:

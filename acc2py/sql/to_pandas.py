@@ -422,6 +422,7 @@ class SQLCompiler:
 
     def insert(self, ins: A.Insert) -> str:
         em = self.em
+        self.deps.add(ins.table)
         cols = repr(ins.columns) if ins.columns else "None"
         if ins.values is not None:
             vals = ", ".join(self.expr(v, Scope()) for v in ins.values)
