@@ -40,6 +40,8 @@ def main(argv=None):
     ap.add_argument("--validar", metavar="PASTA_DO_PACOTE",
                     help="roda a SEQUENCIA do pacote no Access (numa cópia do banco) e no Python com as "
                          "mesmas entradas e compara. Grava o relatório em --resultado (padrão validacao.xlsx)")
+    ap.add_argument("--moderno", action="store_true",
+                    help="gera também <pacote>/moderno/: pandas idiomático, sem o runtime do acc2py")
     ap.add_argument("--tela", action="store_true",
                     help="abre a tela interativa (migração) no navegador")
     ap.add_argument("--etapas-intermediarias", action="store_true",
@@ -117,7 +119,7 @@ def main(argv=None):
                              export_data=args.exportar_dados, locale=args.locale,
                              include_hidden=args.incluir_ocultas, package=args.pacote,
                              input_modes={t: "mensal" for t in (args.mensais or [])},
-                             all_monthly=args.todas_mensais)
+                             all_monthly=args.todas_mensais, modern=args.moderno)
     d = res.diags
     ok_q = sum(1 for _, s in res.queries.values() if s == "ok")
     ok_m = sum(1 for _, s in res.modules.values() if s.startswith("ok"))
@@ -130,6 +132,9 @@ def main(argv=None):
     if res.inputs:
         mens = [t for t, e in res.inputs.items() if e["modo"] == "mensal"]
         print(f"  entradas: {len(res.inputs)} tabela(s), {len(mens)} mensal(is): {', '.join(mens) or '-'}")
+    if res.modern:
+        nm = sum(1 for v in res.modern.values() if v == "moderna")
+        print(f"  versão moderna: {nm}/{len(res.modern)} consulta(s) em pandas idiomático (pasta moderno/)")
     if res.sequence:
         print(f"  sequência: {len(res.sequence)} etapa(s) em SEQUENCIA (consultas.py)")
     if args.resultado and res.sequence:

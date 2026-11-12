@@ -150,13 +150,14 @@ def _transpilar(st: Estado, req: dict):
     saida = req.get("saida") or st.saida
     res = transpile_database(origem, saida, queries=soltas or None, sequence=seq or None,
                              modules=req.get("modulos") or None, package=req.get("pacote") or None,
-                             input_modes=req.get("modos") or {})
+                             input_modes=req.get("modos") or {}, modern=bool(req.get("moderno")))
     seq_file = Path(saida) / f"sequencia_{res.package_dir.name}.txt"
     seq_file.write_text("# Ordem de execução (use com: acc2py ... -s este_arquivo)\n" + "\n".join(seq) + "\n",
                         encoding="utf-8")
     d = res.diags
     return {"pacote": str(res.package_dir), "consultas": {k: v[1] for k, v in res.queries.items()},
             "modulos": {k: v[1] for k, v in res.modules.items()}, "erros": d.count("erro"),
+            "moderno": res.modern,
             "avisos": d.count("aviso"),
             "itens": [{"nivel": i.level, "onde": i.where, "mensagem": i.message} for i in d.items],
             "relatorio": str(res.package_dir / "RELATORIO.md")}

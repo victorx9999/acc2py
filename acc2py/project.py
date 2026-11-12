@@ -28,6 +28,7 @@ class Result:
     added_deps: list = field(default_factory=list)
     sequence: list = field(default_factory=list)
     inputs: dict = field(default_factory=dict)
+    modern: dict = field(default_factory=dict)
     diags: Diagnostics = field(default_factory=Diagnostics)
 
 
@@ -67,7 +68,7 @@ def transpile_database(source: str, out_dir: str, *, queries: Optional[list[str]
                        include_hidden: bool = False, package: Optional[str] = None,
                        sequence: Optional[list[str]] = None,
                        input_modes: Optional[dict] = None, all_monthly: bool = False,
-                       vendor: bool = True) -> Result:
+                       vendor: bool = True, modern: bool = False) -> Result:
     src_path = Path(source)
     pkg_name = package or py_identifier(src_path.stem if src_path.suffix else src_path.name) or "banco"
     pkg_dir = Path(out_dir) / pkg_name
@@ -270,6 +271,19 @@ def transpile_database(source: str, out_dir: str, *, queries: Optional[list[str]
                f'@echo off\r\ncd /d "%~dp0"\r\npython -m {pkg_name}\r\nif errorlevel 1 pause\r\n')
         _write(pkg_dir / "__init__.py", _init_file(pkg_name, source, generated, public_funcs,
                                                    autonumber, locale, export_data))
+        if modern:
+            from .moderno_pacote import gerar_moderno
+            ok_sql = {n: all_queries[n] for n, (_, st_) in res.queries.items() if st_ == "ok"}
+            alvo_seq = [n for n in steps if n in ok_sql]
+            pedidas = [n for n in requested if n in ok_sql]
+            try:
+                res.modern = gerar_moderno(pkg_dir, pkg_name, ok_sql, alvo_seq, entradas, public_funcs,
+                                           pedidas, locale)
+                for n, sit in res.modern.items():
+                    if sit != "moderna":
+                        diags.info(f"moderno: {n}", f"ficou na versão fiel — {sit[6:]}")
+            except Exception as e:  # noqa: BLE001
+                diags.error("moderno", f"versão moderna não gerada: {e}")
         _write(Path(out_dir) / f"exemplo_{pkg_name}.py", _example_file(pkg_name, compiled, all_queries))
         _write(pkg_dir / "RELATORIO.md", _report(res, source, pkg_name, table_names))
     finally:
@@ -540,6 +554,13 @@ def _report(res: Result, source, pkg, tables) -> str:
         for t, e in res.inputs.items():
             out.append(f"| {t} | {e['modo']} | {e.get('vinculada') or '-'} | {len(e.get('colunas') or {})} "
                        f"| {', '.join(e.get('usada_por', [])[:4])} |")
+    if res.modern:
+        nm = sum(1 for v in res.modern.values() if v == "moderna")
+        out += ["", "## Versão moderna (`moderno/`)", "",
+                f"**{nm}/{len(res.modern)}** consultas em pandas idiomático; as demais rodam pela versão fiel. "
+                "Confira com `python -m " + pkg + ".moderno --comparar`.", "",
+                "| Consulta | Situação |", "|---|---|"]
+        out += [f"| {n} | {'✅ moderna' if v == 'moderna' else '↩️ ' + v} |" for n, v in res.modern.items()]
     out += ["", "## Avisos", "", d.to_markdown(),
             "## Como validar", "",
             "1. Rode cada consulta no Access e no Python com os mesmos dados e parâmetros.",

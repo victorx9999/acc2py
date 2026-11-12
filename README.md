@@ -178,6 +178,38 @@ transpile o módulo com `--modulos NomeDoModulo` e chame a Sub convertida: ela e
 consultas na mesma ordem. Se é uma **macro**, converta-a antes no Access
 (*Ferramentas de Banco de Dados → Converter Macros em Visual Basic*).
 
+### Versão moderna (pandas idiomático)
+
+Com `--moderno` (ou a opção "versão moderna" na tela), o pacote ganha também a pasta
+`moderno/`: o mesmo trabalho escrito como um time de engenharia escreveria — uma função
+por consulta, `merge`/`groupby`/`loc`, parâmetros numa `dataclass`, sem o runtime do acc2py.
+
+```python
+def resultado_final(tmpvendas: pd.DataFrame) -> pd.DataFrame:
+    df = tmpvendas
+    g = df.groupby("Nome", dropna=False, as_index=False).agg(Pedidos=("Nome", "size"), Total=("Valor", "sum"))
+    resultado = g[["Nome", "Pedidos", "Total"]]
+    return resultado.sort_values("Total", ascending=False, na_position="last", kind="stable", ignore_index=True)
+```
+
+```python
+from rotina.moderno import Parametros, executar, ler_entradas
+entradas = ler_entradas({"Pedidos": "C:/dados/pedidos_jan.csv"})   # fixas vêm de dados/
+final = executar(entradas, Parametros(desconto=0.1))
+```
+
+O código moderno não reproduz algumas regras do Access (texto sem diferenciar maiúsculas,
+Null em chaves de JOIN, empates no TOP…; a lista está no topo de `moderno/etapas.py`).
+Por isso ele vem com uma comparação contra a versão fiel:
+
+```bash
+python -m rotina.moderno --comparar --param "Desconto=0,1"
+```
+
+Consultas que não dão para modernizar com segurança (subconsultas, DLookup, JOIN sem chave
+de igualdade, crosstab…) continuam na versão fiel dentro do mesmo pipeline, e o
+`RELATORIO.md` diz quais e por quê.
+
 ### Usando o pacote gerado
 
 ```python

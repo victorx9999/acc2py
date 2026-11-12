@@ -173,6 +173,7 @@ pre.log{background:var(--code);border:1px solid var(--line);border-radius:8px;pa
       <input type="text" id="saida" class="grow">
       <label class="note">Nome do pacote</label>
       <input type="text" id="pacote" style="width:200px" placeholder="(nome do banco)">
+      <label class="note" title="Gera também moderno/: pandas idiomático, sem o runtime do acc2py"><input type="checkbox" id="moderno" checked> versão moderna</label>
       <button class="b p" id="btn-transp" onclick="transpilar()">Transpilar</button>
     </div>
     <div id="transp-res"></div>
@@ -353,10 +354,12 @@ async function transpilar(){
   if(!S.seq.length){ msg('transp-res','warn','Monte a sequência antes de transpilar.'); return }
   busy('btn-transp', true, 'Transpilando'); msg('transp-res');
   try{
-    const r = await api('/api/transpilar', {origem:$('origem').value.trim(), saida:$('saida').value.trim(), pacote:$('pacote').value.trim(), sequencia:S.seq, modos:S.modos});
+    const r = await api('/api/transpilar', {origem:$('origem').value.trim(), saida:$('saida').value.trim(), pacote:$('pacote').value.trim(), sequencia:S.seq, modos:S.modos, moderno:$('moderno').checked});
     const nq = Object.keys(r.consultas).length, okq = Object.values(r.consultas).filter(s=>s==='ok').length;
+    const mod = r.moderno ? Object.values(r.moderno) : [];
+    const nmod = mod.filter(v=>v==='moderna').length;
     const itens = r.itens.filter(i=>i.nivel!=='info').slice(0,30).map(i=>`<li><b>${esc(i.onde)}</b>: ${esc(i.mensagem)}</li>`).join('');
-    $('transp-res').innerHTML = `<div class="msg ${r.erros?'warn':'ok'}">Pacote gerado em <b>${esc(r.pacote)}</b> — ${okq}/${nq} consultas convertidas, ${r.erros} erro(s), ${r.avisos} aviso(s). Detalhes em RELATORIO.md.
+    $('transp-res').innerHTML = `<div class="msg ${r.erros?'warn':'ok'}">Pacote gerado em <b>${esc(r.pacote)}</b> — ${okq}/${nq} consultas convertidas, ${r.erros} erro(s), ${r.avisos} aviso(s)${mod.length?`; versão moderna: ${nmod}/${mod.length} consultas em pandas idiomático`:''}. Detalhes em RELATORIO.md.
       ${itens?'<ul style="margin:8px 0 0">'+itens+'</ul>':''}</div>
       <div class="row" style="margin-top:10px"><button class="b p" onclick='irExecucao(${JSON.stringify(r.pacote)})'>Ir para execução →</button></div>`;
   }catch(e){ msg('transp-res','err', esc(e.message)) }
